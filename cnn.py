@@ -1,23 +1,14 @@
 import numpy
 import gzip
+from numba import cuda, float32
 
 class ReLU:
     def forward(self, feature_map):
-        relu_out = numpy.zeros(feature_map.shape)
-        for map_num in range(feature_map.shape[-1]):
-            for r in numpy.arange(0,feature_map.shape[0]):
-                for c in numpy.arange(0, feature_map.shape[1]):
-                    relu_out[r, c, map_num] = numpy.max([feature_map[r, c, map_num], 0])
-        return relu_out
-    def relu_derived(self, feature_map):
-        relu_out = numpy.zeros(feature_map.shape)
-        for map_num in range(feature_map.shape[-1]):
-            for r in numpy.arange(0,feature_map.shape[0]):
-                for c in numpy.arange(0, feature_map.shape[1]):
-                    if feature_map[r, c, map_num] > 0:
-                        relu_out[r, c, map_num] = 1
-                    else:
-                        relu_out[r, c, map_num] = 0
+        return numpy.maximum(0, feature_map)
+    def backward(self, pro,o_grad):
+        print(pro)
+        o_grad[pro < 0] = 0
+        return o_grad
     
 class CNN:
     def conv_(self, img, conv_filter):
@@ -64,18 +55,18 @@ class CNN:
                         relu_out[r, c, map_num] = 0
 
 def convertToOneHot(vector, num_classes=None):
-	assert isinstance(vector, numpy.ndarray)
-	assert len(vector) > 0
+    assert isinstance(vector, numpy.ndarray)
+    assert len(vector) > 0
 
-	if num_classes is None:
-		num_classes = numpy.max(vector)+1
-	else:
-		assert num_classes > 0
-		assert num_classes >= numpy.max(vector)
+    if num_classes is None:
+        num_classes = numpy.max(vector)+1
+    else:
+        assert num_classes > 0
+        assert num_classes >= numpy.max(vector)
 
-	result = numpy.zeros(shape=(len(vector), num_classes))
-	result[numpy.arange(len(vector)), vector] = 1
-	return result.astype(int)
+    result = numpy.zeros(shape=(len(vector), num_classes))
+    result[numpy.arange(len(vector)), vector] = 1
+    return result.astype(int)
 
 def getMnistData():
 	with gzip.open('train-images-idx3-ubyte.gz', 'rb') as f:
@@ -102,4 +93,9 @@ def getMnistData():
 
 
 dataset = getMnistData()
+# print(dataset[0])
+
+relu = ReLU()
 print(dataset[0].shape)
+o1_grad = numpy.zeros(dataset[0].shape)
+# print(relu.backward(dataset[0][0], o1_grad))
