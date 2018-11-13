@@ -3,6 +3,8 @@ import gzip
 import pickle
 from time import time
 from numba import cuda, float32
+from keras.datasets import mnist
+
 
 # epochs = 10
 # neurons1 = 32
@@ -10,7 +12,7 @@ from numba import cuda, float32
 # learning_rate = 0.001
 
 np.random.seed(1)
-
+n_classes = 10
 
 def saveWeights(wts):
     for num in range(len(wts)):
@@ -39,27 +41,15 @@ def convertToOneHot(vector, num_classes=None):
 
 
 def getMnistData():
-    with gzip.open('train-images-idx3-ubyte.gz', 'rb') as f:
-        data = np.frombuffer(f.read(), np.uint8, offset=16)
-    data = data.reshape(-1, 28, 28, 1)
-    data = np.divide(data, 256)
 
-    with gzip.open('train-labels-idx1-ubyte.gz', 'rb') as f:
-        labels = np.frombuffer(f.read(), np.uint8, offset=8)
-    labels = convertToOneHot(labels, 10)
-    labels = labels.reshape(60000, 10, 1)
-
-    with gzip.open('t10k-images-idx3-ubyte.gz', 'rb') as f:
-        testdata = np.frombuffer(f.read(), np.uint8, offset=16)
-    testdata = testdata.reshape(-1, 28, 28, 1)
-    testdata = np.divide(testdata, 256)
-
-    with gzip.open('t10k-labels-idx1-ubyte.gz', 'rb') as f:
-        testlabels = np.frombuffer(f.read(), np.uint8, offset=8)
-    testlabels = convertToOneHot(testlabels, 10)
-    testlabels = testlabels.reshape(10000, 10, 1)
-
-    return data, labels, testdata, testlabels
+	(X_train,y_train), (X_test, y_test) = mnist.load_data()
+	data = X_train.reshape(60000,28,28,1).astype('float32')
+	testdata = X_test.reshape(10000,28,28,1).astype('float32')
+	labels = convertToOneHot(y_train, n_classes)
+	labels = labels.reshape(60000, n_classes, 1)
+	testlabels = convertToOneHot(y_test, n_classes)
+	testlabels = labels.reshape(60000, n_classes, 1)
+	return data, labels, testdata, testlabels
 
 
 def reLU(x):
