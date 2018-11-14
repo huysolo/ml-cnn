@@ -98,6 +98,13 @@ def getMnistData():
 	labels = labels.reshape(60000, n_classes, 1)
 	testlabels = convertToOneHot(y_test, n_classes)
 	testlabels = labels.reshape(60000, n_classes, 1)
+	# (X_train,y_train), (X_test, y_test) = mnist.load_data()
+	# data = X_train.reshape(60000,28,28,1).astype('float32')
+	# testdata = X_test.reshape(10000,28,28,1).astype('float32')
+	# labels = convertToOneHot(y_train, n_classes)
+	# labels = labels.reshape(60000, n_classes, 1)
+	# testlabels = convertToOneHot(y_test, n_classes)
+	# testlabels = labels.reshape(60000, n_classes, 1)
 	return data, labels, testdata, testlabels
 
 
@@ -125,13 +132,13 @@ class CNN_CUDA:
         self.f1, self.w1, self.b1, self.w2, self.b2, self.w3, self.b3 = weights
 
     def conv_forward(self, pic, f, pro):
-        cuda_conv_forward[(8), (26, 26)](pic, f, pro)
+        cuda_conv_forward[(pro.shape[-1]), pro.shape[:-1]](pic, f, pro)
 
     def conv_backward(self, x, f, pro_grad, dx, f_grad):
         cuda_conv_backward(x, f, pro_grad, dx, f_grad)
 
     def pool_forward(self, o, p):
-        cuda_pool_forward[(8), (13, 13)](o, p)
+        cuda_pool_forward[(o.shape[-1]), o.shape[:-1]](o, p)
 
     def pool_backward(self, p_grad, o_grad):
         cuda_pool_backward(p_grad, o_grad)
@@ -177,46 +184,44 @@ class CNN_CUDA:
         newWeights = self.learning_rate * m / (np.sqrt(v) + eps)
         return newWeights, m, v
 
-	def conv_forward(self, X, W, b, stride=1, padding=1):
-		cache = W, b, stride, padding
-		n_filters, d_filter, h_filter, w_filter = W.shape
-		n_x, d_x, h_x, w_x = X.shape
-		h_out = (h_x - h_filter + 2 * padding) / stride + 1
-		w_out = (w_x - w_filter + 2 * padding) / stride + 1
+    def conv_forward_n(self, X, W):
+        cache = W, stride, padding
+        n_filters, d_filter, h_filter, w_filter = (3, 3, 3, 3)
+        n_x, d_x, h_x, w_x = X.shape
+        h_out = (h_x - h_filter + 2 * padding) / stride + 1
+        w_out = (w_x - w_filter + 2 * padding) / stride + 1
 
-		if not h_out.is_integer() or not w_out.is_integer():
-			raise Exception('Invalid output dimension!')
+        if not h_out.is_integer() or not w_out.is_integer():
+            raise Exception('Invalid output dimension!')
 
-		h_out, w_out = int(h_out), int(w_out)
+        h_out, w_out = int(h_out), int(w_out)
 
-		X_col = im2col_indices(X, h_filter, w_filter, padding=padding, stride=stride)
-		W_col = W.reshape(n_filters, -1)
+        X_col = im2col_indices(X, h_filter, w_filter, padding=1, stride=1)
+        W_col = W.reshape(n_filters, -1)
 
-		out = W_col @ X_col + b
-		out = out.reshape(n_filters, h_out, w_out, n_x)
-		out = out.transpose(3, 0, 1, 2)
-
-		cache = (X, W, b, stride, padding, X_col)
-
-		return out, cache
+        out = W_col @ X_col
+        out = out.reshape(n_filters, h_out, w_out, n_x)
+        out = out.transpose(3, 0, 1, 2)
 
 
-	def conv_backward(self, dout, cache):
-		X, W, b, stride, padding, X_col = cache
-		n_filter, d_filter, h_filter, w_filter = W.shape
+        return out, X, W, X_col
 
-		db = np.sum(dout, axis=(0, 2, 3))
-		db = db.reshape(n_filter, -1)
 
-		dout_reshaped = dout.transpose(1, 2, 3, 0).reshape(n_filter, -1)
-		dW = dout_reshaped @ X_col.T
-		dW = dW.reshape(W.shape)
+    def conv_backward_n(self, X, W, b, X_col, dout, stride, padding):
+        n_filter, d_filter, h_filter, w_filter = (3, 3, 3, 3)
 
-		W_reshape = W.reshape(n_filter, -1)
-		dX_col = W_reshape.T @ dout_reshaped
-		dX = col2im_indices(dX_col, X.shape, h_filter, w_filter, padding=padding, stride=stride)
+        db = np.sum(dout, axis=(0, 2, 3))
+        db = db.reshape(n_filter, -1)
 
-		return dX, dW, db
+        dout_reshaped = dout.transpose(1, 2, 3, 0).reshape(n_filter, -1)
+        dW = dout_reshaped @ X_col.T
+        dW = dW.reshape(W.shape)
+
+        W_reshape = W.reshape(n_filter, -1)
+        dX_col = W_reshape.T @ dout_reshaped
+        dX = col2im_indices(dX_col, X.shape, h_filter, w_filter, padding=padding, stride=stride)
+
+        return dX, dW, db
 
     def train(self):
 
@@ -230,6 +235,8 @@ class CNN_CUDA:
             for index in range(0, 60000):
                 o1 = np.zeros([26, 26, 8])
                 pro1 = np.zeros([26, 26, 8])
+                # print(self.f1.shape)
+                # print(data[index].shape)
                 self.conv_forward(data[index], self.f1, pro1)
                 o1 = reLU(pro1)
                 p1 = np.zeros([13, 13, 8])
@@ -268,8 +275,8 @@ class CNN_CUDA:
                 self.pool_backward(p_grad, o1_grad)
 
                 pro1_grad = reLU_back(pro1, o1_grad)
-                dx = np.zeros([28, 28, 1])
-                f1_grad = np.zeros([8, 3, 3, 1])
+                dx = np.zeros(data[index].shape)
+                f1_grad = np.zeros(self.f1.shape)
                 self.conv_backward(data[index], self.f1, pro1_grad, dx, f1_grad)
 
                 f1_, mf1, vf1 = self.adam_optimization(f1_grad, mf1, vf1)
@@ -289,8 +296,7 @@ class CNN_CUDA:
 
             print(str(epoch_no) + ": " + 'Training Accuracy: ' + str(num_correct / 600) + '%')
             print('Time taken: ' + str((time() - start)) + 's')
-            wts = [self.f1, self.w1, self.b1, self.w2, self.b2, self.w3,
-                   self.b3]
+            wts = [self.f1, self.w1, self.b1, self.w2, self.b2, self.w3, self.b3]
             saveWeights(wts)
 
 
@@ -360,7 +366,7 @@ def loadWeights():
     return f1, w1, b1, w2, b2, w3, b3
 
 
-CNN_C = CNN_CUDA(epochs=10, neurons1=32, neurons2=16, learning_rate=0.001)
+CNN_C = CNN_CUDA(epochs=1, neurons1=32, neurons2=16, learning_rate=0.001)
 CNN_C.train()
 
 num_correct = 0
