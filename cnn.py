@@ -205,7 +205,7 @@ for epoch_no in range(0,epochs):
 		wx1_grad = sig1_grad
 		w1_grad = np.matmul(wx1_grad, np.transpose(pflat))
 		pflat_grad = np.matmul(np.transpose(w1), wx1_grad)
-		p_grad = pflat_grad.reshape(13,13,8)
+		p_grad = pflat_grad.reshape(p1.shape)
 		o1_grad = np.zeros(o1.shape)
 		cuda_pool_backward[(o1.shape[-1]),o1.shape[:-1]](p_grad, o1_grad)
 		pro1_grad = reLU_back(pro1,o1_grad)
