@@ -23,15 +23,19 @@ def im2col(X, kernel_size):
             i = i + 1
     return np.rot90(result), (row_length, col_length)
 def kernel2row(kernel, X_size):
+    print(X_size)
     row_length = X_size[0] - kernel.shape[0]
     col_length = X_size[1] - kernel.shape[1]
     rotated_kernel = np.rot90(kernel, 2)
-    result = np.zeros((np.prod(X_size), col_length * row_length))
+    result = np.zeros(((col_length ) * (row_length ), np.prod(X_size)))
+    print(result.shape)
     i = 0
-    for row in range(0, row_length):
-        for col in range(0, col_length):
+    for row in range(0, row_length - 1):
+        for col in range(0, col_length - 1):
             # print(((row, row_length - row), (col, col_length - col)))
             window =  np.pad(rotated_kernel, (((row, row_length - row), (col, col_length - col))), 'constant')
+            # print(window.shape)
+            # print(window.shape)
             result[i] = np.ndarray.flatten(window)
             i = i + 1
             # print(window.shape)
@@ -202,7 +206,7 @@ cnn.add(CONV((3, 3), 'sigmoid'))
 #cnn.add(FLATTEN())
 cnn.add(FC(W_size=(10, 26)))
 cnn.train(X_train, y_train, 0.01, 1)
-# kernel = np.random.rand(3, 3)
+kernel = np.random.rand(3, 3)
 # x = im2col(X_train[0], kernel.shape)
 # w = kernel2row(kernel, X_train[0].shape)
 # y = np.matmul(x, w)
