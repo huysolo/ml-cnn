@@ -8,7 +8,6 @@ from keras.layers import Dense, Dropout
 from keras.layers import Flatten,  MaxPooling2D, Conv2D
 from keras.callbacks import TensorBoard
 
-
 import os
 os.environ['NUMBAPRO_LIBDEVICE'] = "/usr/lib/nvidia-cuda-toolkit/libdevice"
 os.environ['NUMBAPRO_NVVM'] = "/usr/lib/x86_64-linux-gnu/libnvvm.so"
@@ -20,16 +19,31 @@ y_test = keras.utils.to_categorical(y_test, n_classes)
 #@vectorize()
 #def im2colcuda(X, kernel_size):
 
+def matmul(A, B, C):
+    """Perform matrix multiplication of C = A * B
+    """
+    row, col = cuda.grid(2)
+    if row < C.shape[0] and col < C.shape[1]:
+        tmp = 0.
+        for k in range(A.shape[1]):
+            tmp += A[row, k] * B[k, col]
+        C[row, col] = tmp
+
 def im2col(X, kernel_size):
     row_length = X.shape[0] - kernel_size[0] + 1
     col_length = X.shape[1] - kernel_size[1] + 1
     result = np.zeros((col_length * row_length, np.prod(kernel_size)))
     i = 0
+    # threadsperblock = (16, 16)
+    # blockspergrid_x = int(math.ceil(A.shape[0] / threadsperblock[0]))
+    # blockspergrid_y = int(math.ceil(B.shape[1] / threadsperblock[1]))
+    # blockspergrid = (blockspergrid_x, blockspergrid_y)
+    
     for row in range(0, row_length):
         for col in range(0, col_length):
+            num = row * row_length + col
             window = X[row:row+kernel_size[0], col:col+kernel_size[1]]
-            result[i] = np.ndarray.flatten(window)
-            i = i + 1
+            result[num] = np.ndarray.flatten(window)
     return np.rot90(result), (row_length, col_length)
 def kernel2row(kernel, X_size):
     row_length = X_size[0] - kernel.shape[0]
@@ -52,12 +66,11 @@ def kernel2rowOp(kernel, X_size):
     result = np.zeros(((X_size[0] - kernel.shape[0] + 1) * (X_size[1] - kernel.shape[1] + 1), np.prod(X_size)))
 
     big_kernel = np.pad(rotated_kernel, ((row_diff, row_diff), (col_diff, col_diff)), 'constant')
-    i = 0
     for row in range(row_length, row_diff + 2, -1):
         for col in range(col_length, col_diff + 2, -1):
+            num = (row_length - row_diff - 2) * (row_length - row) + (col_length - col)
             window = big_kernel[row - X_size[0] : row , col - X_size[1] : col ]
-            result[i] = np.ndarray.flatten(window)
-            i = i + 1
+            result[num] = np.ndarray.flatten(window)
     return result
 
 class FLATTEN:
@@ -182,19 +195,13 @@ class CNN:
                 Y = train_data[index]
                 for layer in self.layers:
                     Y = layer.forward(Y)
-                #pic_loss = (train_label[index] - Y.T)**2
                 diff_loss = softmaxOutput.diff(Y, train_label[index].astype(int))
-                if np.argmax(Y) == np.argmax(train_label[index]):
-                    acc = acc + 1
                 if (index+1)%100 == 0:
-                    #print(str(epoch_idx) + ": " + str(index+1) + ": " + str(loss))
                     print ("accuracy: "+str(epoch_idx) + ": " + str(index+1) + ": " + str(np.mean(np.square(train_label[index] - Y.T))))
-                #dy = 2 * (Y.T - train_label[index]).T
                 dy = diff_loss
                 for layer in self.layers[::-1]:
                     dy = layer.backward(dy)
-
-
+   
 cnn = CNN()
 cnn.add(CONV((3, 3), 'sigmoid'))
 #cnn.add(FLATTEN())
